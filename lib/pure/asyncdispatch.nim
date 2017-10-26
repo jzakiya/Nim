@@ -219,7 +219,7 @@ when defined(windows) or defined(nimdoc):
 
     PCustomOverlapped* = ref CustomOverlapped
 
-    AsyncFD* = distinct int
+    AsyncFD* = distinct int ## An FD that is registered in the dispatcher.
 
     PostCallbackData = object
       ioPort: Handle
@@ -262,13 +262,14 @@ when defined(windows) or defined(nimdoc):
       setGlobalDispatcher(newDispatcher())
     result = gDisp
 
-  proc register*(fd: AsyncFD) =
+  proc register*(fd: SocketHandle | AsyncFD): AsyncFD {.discardable.} =
     ## Registers ``fd`` with the dispatcher.
     let p = getGlobalDispatcher()
     if createIoCompletionPort(fd.Handle, p.ioPort,
                               cast[CompletionKey](fd), 1) == 0:
       raiseOSError(osLastError())
     p.handles.incl(fd)
+    return fd.AsyncFD
 
   proc verifyPresence(fd: AsyncFD) =
     ## Ensures that file descriptor has been registered with the dispatcher.
@@ -753,6 +754,9 @@ when defined(windows) or defined(nimdoc):
     ## Unregisters ``fd``.
     getGlobalDispatcher().handles.excl(fd)
 
+  proc contains*(disp: PDispatcher, fd: AsyncFd | SocketHandle): bool =
+    return fd.SocketHandle in disp.handles
+
   {.push stackTrace:off.}
   proc waitableCallback(param: pointer,
                         timerOrWaitFired: WINBOOL): void {.stdcall.} =
@@ -1091,10 +1095,11 @@ else:
       setGlobalDispatcher(newDispatcher())
     result = gDisp
 
-  proc register*(fd: AsyncFD) =
+  proc register*(fd: SocketHandle | AsyncFD): AsyncFD {.discardable.} =
     let p = getGlobalDispatcher()
     var data = newAsyncData()
     p.selector.registerHandle(fd.SocketHandle, {}, data)
+    return fd.AsyncFD
 
   proc closeSocket*(sock: AsyncFD) =
     let disp = getGlobalDispatcher()
@@ -1106,6 +1111,9 @@ else:
 
   proc unregister*(ev: AsyncEvent) =
     getGlobalDispatcher().selector.unregister(SelectEvent(ev))
+  
+  proc contains*(disp: PDispatcher, fd: AsyncFd | SocketHandle): bool =
+    return fd.SocketHandle in disp.selector
 
   proc addRead*(fd: AsyncFD, cb: Callback) =
     let p = getGlobalDispatcher()

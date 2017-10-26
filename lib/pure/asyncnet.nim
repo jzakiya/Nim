@@ -140,9 +140,18 @@ proc newAsyncSocket*(fd: AsyncFD, domain: Domain = AF_INET,
     sockType: SockType = SOCK_STREAM,
     protocol: Protocol = IPPROTO_TCP, buffered = true): AsyncSocket =
   ## Creates a new ``AsyncSocket`` based on the supplied params.
+  ##
+  ## The supplied ``fd``'s non-blocking state will be enabled implicitly.
+  ##
+  ## **Note**: This procedure will **NOT** register ``fd`` with the global
+  ## async dispatcher. You need to do this manually. If you have used
+  ## ``newAsyncNativeSocket`` to create ``fd`` then it's already registered.
+  ## The reason for this is that the ``AsyncFD`` type is a special type for an
+  ## FD that signifies that its been registered.
   assert fd != osInvalidSocket.AsyncFD
   new(result)
   result.fd = fd.SocketHandle
+  fd.SocketHandle.setBlocking(false)
   result.isBuffered = buffered
   result.domain = domain
   result.sockType = sockType
@@ -692,6 +701,47 @@ proc getFd*(socket: AsyncSocket): SocketHandle =
 proc isClosed*(socket: AsyncSocket): bool =
   ## Determines whether the socket has been closed.
   return socket.closed
+
+when compileOption("threads") or defined(nimdoc):
+  import selectors
+  import times # TODO: I shouldn't need to do this, tried using `bind` but failed
+  import threadpool
+  type
+    AcceptCB* = proc (client: AsyncSocket, address: string): Future[void] {.gcsafe.}
+
+  proc parallelAccept*(socket: AsyncSocket, cb: AcceptCB) =
+    echo("Socket fd ", socket.fd.int)
+    proc thread(socket: SocketHandle, cb: AcceptCB, cpuID: int) =
+      let selector = newSelector[string]() # TODO: Why can't I use 'void'?
+      selector.registerHandle(socket, {Event.Read}, nil)
+      var events: array[1, ReadyKey]
+      while true:
+        if selector.selectInto(-1, events) == 1:
+          let (client, address) = socket.accept()
+          if client == osInvalidSocket:
+            let lastError = osLastError()
+            if lastError.int32 in {EWOULDBLOCK, EAGAIN}:
+              # echo("EAGAIN")
+              continue
+
+            raiseOSError(osLastError())
+
+
+          # echo("Worker accept: ", cpuID, " fd: ", client.int)
+          # TODO: Restore the domain/other info from server.
+          let clientSock = newAsyncSocket(register(client))
+
+          clientSock.close()
+          # TODO: It seems that exceptions raised by asyncCheck aren't
+          # being thrown in the thread :\
+          #asyncCheck cb(clientSock, address)
+
+
+    let cpuCount = 4
+    for i in 0 .. <cpuCount:
+      spawn thread(socket.fd, cb, i)
+    sync()
+    # thread(socket.fd, cb, 0)
 
 when not defined(testing) and isMainModule:
   type
