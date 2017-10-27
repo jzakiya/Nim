@@ -711,37 +711,38 @@ when compileOption("threads") or defined(nimdoc):
 
   proc parallelAccept*(socket: AsyncSocket, cb: AcceptCB) =
     echo("Socket fd ", socket.fd.int)
+    socket.fd.setBlocking(true)
     proc thread(socket: SocketHandle, cb: AcceptCB, cpuID: int) =
-      let selector = newSelector[string]() # TODO: Why can't I use 'void'?
-      selector.registerHandle(socket, {Event.Read}, nil)
-      var events: array[1, ReadyKey]
+      #let selector = newSelector[string]() # TODO: Why can't I use 'void'?
+      #selector.registerHandle(socket, {Event.Read}, nil)
+      #var events: array[1, ReadyKey]
       while true:
-        if selector.selectInto(-1, events) == 1:
-          let (client, address) = socket.accept()
-          if client == osInvalidSocket:
-            let lastError = osLastError()
-            if lastError.int32 in {EWOULDBLOCK, EAGAIN}:
-              # echo("EAGAIN")
-              continue
+        # if selector.selectInto(-1, events) == 1:
+        let (client, address) = socket.accept()
+        if client == osInvalidSocket:
+          let lastError = osLastError()
+          #if lastError.int32 in {EWOULDBLOCK, EAGAIN}:
+          # echo("EAGAIN")
+          #  continue
 
-            raiseOSError(osLastError())
+          raiseOSError(osLastError())
 
+        client.close()
+        #echo("Worker accept: ", cpuID, " fd: ", client.int)
+        # TODO: Restore the domain/other info from server.
+        #let clientSock = newAsyncSocket(register(client))
 
-          # echo("Worker accept: ", cpuID, " fd: ", client.int)
-          # TODO: Restore the domain/other info from server.
-          let clientSock = newAsyncSocket(register(client))
-
-          clientSock.close()
-          # TODO: It seems that exceptions raised by asyncCheck aren't
-          # being thrown in the thread :\
-          #asyncCheck cb(clientSock, address)
+        #clientSock.close()
+        # TODO: It seems that exceptions raised by asyncCheck aren't
+        # being thrown in the thread :\
+        #asyncCheck cb(clientSock, address)
 
 
     let cpuCount = 4
-    for i in 0 .. <cpuCount:
-      spawn thread(socket.fd, cb, i)
-    sync()
-    # thread(socket.fd, cb, 0)
+    # for i in 0 .. <cpuCount:
+    #   spawn thread(socket.fd, cb, i)
+    # sync()
+    thread(socket.fd, cb, 0)
 
 when not defined(testing) and isMainModule:
   type
