@@ -54,9 +54,9 @@ when defined(nimdoc):
       Timer,       ## Timer descriptor is completed
       Signal,      ## Signal is raised
       Process,     ## Process is finished
-      Vnode,       ## BSD specific file change happens
+      Vnode,       ## BSD specific file change
       User,        ## User event is raised
-      Error,       ## Error happens while waiting, for descriptor
+      Error,       ## Error occurred while waiting for descriptor
       VnodeWrite,  ## NOTE_WRITE (BSD specific, write to file occurred)
       VnodeDelete, ## NOTE_DELETE (BSD specific, unlink of file occurred)
       VnodeExtend, ## NOTE_EXTEND (BSD specific, file extended)
@@ -69,6 +69,8 @@ when defined(nimdoc):
       ## An object which holds result for descriptor
       fd* : int ## file/socket descriptor
       events*: set[Event] ## set of events
+      errorCode*: OSErrorCode ## additional error code information for
+                              ## Error events
 
     SelectEvent* = object
       ## An object which holds user defined event
@@ -245,6 +247,7 @@ else:
     ReadyKey* = object
       fd* : int
       events*: set[Event]
+      errorCode*: OSErrorCode
 
     SelectorKey[T] = object
       ident: int

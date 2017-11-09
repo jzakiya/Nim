@@ -391,9 +391,19 @@ proc selectInto*[T](s: Selector[T], timeout: int,
       let pevents = resTable[i].events
       var pkey = addr(s.fds[fdi])
       doAssert(pkey.ident != 0)
-      var rkey = ReadyKey(fd: int(fdi), events: {})
+      var rkey = ReadyKey(fd: fdi, events: {})
 
       if (pevents and EPOLLERR) != 0 or (pevents and EPOLLHUP) != 0:
+        if (pevents and EPOLLHUP) != 0:
+          rkey.errorCode = ECONNRESET.OSErrorCode
+        else:
+          # Try reading SO_ERROR from fd.
+          var error: cint
+          var size = sizeof(error).SockLen
+          if getsockopt(fdi.SocketHandle, SOL_SOCKET, SO_ERROR, addr(error),
+                        addr(size)) == 0'i32:
+            rkey.errorCode = error.OSErrorCode
+
         rkey.events.incl(Event.Error)
       if (pevents and EPOLLOUT) != 0:
         rkey.events.incl(Event.Write)
