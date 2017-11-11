@@ -267,9 +267,17 @@ when defined(windows) or defined(nimdoc):
     ## (Unix) for the specified dispatcher.
     return disp.ioPort
 
-  proc register*(fd: SocketHandle | AsyncFD): AsyncFD {.discardable.} =
+  proc register*(fd: cint | SocketHandle | AsyncFD): AsyncFD {.discardable.} =
     ## Registers ``fd`` with the dispatcher.
+    ##
+    ## By convention, an ``AsyncFD`` is said to be already registered in the
+    ## dispatcher. This procedure will raise an exception if ``fd`` has already
+    ## been registered, but only if the type of the ``fd`` isn't ``AsyncFD``.
     let p = getGlobalDispatcher()
+    when fd is AsyncFD:
+      if fd in p.handles:
+        return
+
     if createIoCompletionPort(fd.Handle, p.ioPort,
                               cast[CompletionKey](fd), 1) == 0:
       raiseOSError(osLastError())
@@ -1103,8 +1111,11 @@ else:
   proc getIoHandler*(disp: PDispatcher): Selector[AsyncData] =
     return disp.selector
 
-  proc register*(fd: SocketHandle | AsyncFD): AsyncFD {.discardable.} =
+  proc register*(fd: cint | SocketHandle | AsyncFD): AsyncFD {.discardable.} =
     let p = getGlobalDispatcher()
+    when fd is AsyncFD:
+      if fd.SocketHandle in p.selector:
+        return
     var data = newAsyncData()
     p.selector.registerHandle(fd.SocketHandle, {}, data)
     return fd.AsyncFD
