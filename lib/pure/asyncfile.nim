@@ -85,7 +85,7 @@ proc newAsyncFile*(fd: AsyncFd): AsyncFile =
   ## Creates `AsyncFile` with a previously opened file descriptor `fd`.
   new result
   result.fd = fd
-  register(result.fd)
+  discard register(result.fd) # Bug #6722
 
 proc openAsync*(filename: string, mode = fmRead): AsyncFile =
   ## Opens a file specified by the path in ``filename`` using
