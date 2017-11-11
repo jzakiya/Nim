@@ -81,13 +81,14 @@ when defined(nimdoc):
   proc close*[T](s: Selector[T]) =
     ## Closes the selector.
 
-  proc registerHandle*[T](s: Selector[T], fd: SocketHandle, events: set[Event],
-                          data: T) =
+  proc registerHandle*[T](s: Selector[T], fd: int | SocketHandle,
+                          events: set[Event], data: T) =
     ## Registers file/socket descriptor ``fd`` to selector ``s``
     ## with events set in ``events``. The ``data`` is application-defined
     ## data, which will be passed when an event is triggered.
 
-  proc updateHandle*[T](s: Selector[T], fd: SocketHandle, events: set[Event]) =
+  proc updateHandle*[T](s: Selector[T], fd: int | SocketHandle,
+                        events: set[Event]) =
     ## Update file/socket descriptor ``fd``, registered in selector
     ## ``s`` with new events set ``event``.
 
@@ -222,6 +223,11 @@ when defined(nimdoc):
 
   proc contains*[T](s: Selector[T], fd: SocketHandle|int): bool {.inline.} =
     ## Determines whether selector contains a file descriptor.
+
+  proc getFd*[T](s: Selector[T]): int =
+    ## Retrieves the underlying selector's file descriptor.
+    ##
+    ## For *poll* and *select* selectors ``-1`` is returned.
 
 else:
   when hasThreadSupport:
