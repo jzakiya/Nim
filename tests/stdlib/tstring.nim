@@ -50,6 +50,15 @@ proc test_string_slice() =
   s[2..0] = numbers
   doAssert s == "ab1234567890cdefghijklmnopqrstuvwxyz"
 
+  # bug #6223
+  try:
+    discard s[0..999]
+    doAssert false
+  except IndexError:
+    discard
+  except:
+    doAssert false
+
   echo("OK")
 
 test_string_slice()
